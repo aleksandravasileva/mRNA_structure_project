@@ -1,33 +1,28 @@
+import sys
 import subprocess as sp
+import os
 
-rnafold_proc = sp.Popen("RNAfold < /home/aleksandra/Документы/Bioinformatics_Institute/Spring/Python/mRNA_structure_project/Week_2/HIV-1_IRES.fasta", shell=True, stdin=sp.PIPE, stdout=sp.PIPE)
-# Я чего-то так и не разобралась, как сделать так, чтобы fasta-файл считывался с клавиатуры и передавался в Popen
+path = sys.argv[1]
+out_path = sys.argv[2]
+
+#out_path путь к папке, которая должна быть создана
+# и в которую будут записываться все промежуточные файлы
+
+rnafold_proc = sp.Popen("RNAfold < {}".format(path), shell=True, stdout=sp.PIPE)
 
 rnafold_proc.wait()
-rnafold_result_0 = rnafold_proc.communicate()
+rnafold_result = rnafold_proc.communicate()[0].decode().splitlines()
 
+seq_name = rnafold_result[0].split(">")[1]
 
-rnafold_result = str(rnafold_result_0[0])
+draft_folding_string = rnafold_result[2].split(" ")[0]
 
-print(rnafold_result)
-#b'>HIV-1_IRES\nAUGGGUGCGAGAGCGUCGGUAUUAAGCGGGGGAGAAUUAGAUAAAUGGGAAAAAAUUCGGUUAAGGCCAGGGGGAAAGAAACAAUAUAAACUAAAACAUAUAGUAUGGGCAAGCAGGGAGCUAGAACGAUUCGCAGUUAAUCCUGGCCUUUUAGAGACAUCAGAAGGCUGUAGACAAAUACUGGGACAGCUACAACCAUCCCUUCAGACAGGAUCAGAAGAACUUAGAUCAUUAUAUAAUACAAUAGCAGUCCUCUAUUGUGUGCAUCAAAGGAUAGAUGUAAAAGACACCAAGGAAGCCUUAGAUAAGAUAGAGGAAGGACAAAACAAAAGUAAGAAAAAGGCACAGCAAGCAGCAGCUGACACAGGAAACAACAGCCAGGUCAGCCAAAAUUACCCUAUAGUGCAGAACCUCCAGGGGCAAAUGGUACAUCAGGCCAUAUCACCUAGAACU\n.(((((((((.....)))((((((...((((((..........(((.(((.....))).)))((((((((((.....(((.(.......((((.......))))..(..(.(((.....))).)..)).)))........))))))))))...((....))....((((((...((.....))..)))))).......)))))).......((((...........))))......)))))).....(..((((((((((((((((((........))))).....)))).((((...))))......)))))))))..)...........................((.....)).((((((.(.((.........)).)))))))........((((..((........))..))))....(((((.......)))))..))))))..... (-88.70)\n'
-#Нужна только часть с dot-brackets
+try:
+    os.mkdir("{}".format(out_path))
+except FileExistsError:
+    print("Don't create directory next time")
+finally:
+    with open('{}/{}_RNAfold_output.fasta'.format(out_path, seq_name),
+              'w') as rnafold_new_file:
+        rnafold_new_file.write(draft_folding_string)
 
-rnafold_result = rnafold_result.split("'")
-# Если не убрать кавычки в строке, ничего не работает
-
-rnafold_result = rnafold_result[1].split('\\n')
-print(rnafold_result)
-#['>HIV-1_IRES', 'AUGGGUGCGAGAGCGUCGGUAUUAAGCGGGGGAGAAUUAGAUAAAUGGGAAAAAAUUCGGUUAAGGCCAGGGGGAAAGAAACAAUAUAAACUAAAACAUAUAGUAUGGGCAAGCAGGGAGCUAGAACGAUUCGCAGUUAAUCCUGGCCUUUUAGAGACAUCAGAAGGCUGUAGACAAAUACUGGGACAGCUACAACCAUCCCUUCAGACAGGAUCAGAAGAACUUAGAUCAUUAUAUAAUACAAUAGCAGUCCUCUAUUGUGUGCAUCAAAGGAUAGAUGUAAAAGACACCAAGGAAGCCUUAGAUAAGAUAGAGGAAGGACAAAACAAAAGUAAGAAAAAGGCACAGCAAGCAGCAGCUGACACAGGAAACAACAGCCAGGUCAGCCAAAAUUACCCUAUAGUGCAGAACCUCCAGGGGCAAAUGGUACAUCAGGCCAUAUCACCUAGAACU', '.(((((((((.....)))((((((...((((((..........(((.(((.....))).)))((((((((((.....(((.(.......((((.......))))..(..(.(((.....))).)..)).)))........))))))))))...((....))....((((((...((.....))..)))))).......)))))).......((((...........))))......)))))).....(..((((((((((((((((((........))))).....)))).((((...))))......)))))))))..)...........................((.....)).((((((.(.((.........)).)))))))........((((..((........))..))))....(((((.......)))))..))))))..... (-88.70)', '']
-
-rnafold_result = rnafold_result[2].split(' ')
-print(rnafold_result)
-#['.(((((((((.....)))((((((...((((((..........(((.(((.....))).)))((((((((((.....(((.(.......((((.......))))..(..(.(((.....))).)..)).)))........))))))))))...((....))....((((((...((.....))..)))))).......)))))).......((((...........))))......)))))).....(..((((((((((((((((((........))))).....)))).((((...))))......)))))))))..)...........................((.....)).((((((.(.((.........)).)))))))........((((..((........))..))))....(((((.......)))))..)))))).....', '(-88.70)']
-#Нужно еще убрать значения mfe в конце
-
-rnafold_output = rnafold_result[0]
-
-print(rnafold_output)
-
-with open('/home/aleksandra/Документы/Bioinformatics_Institute/Spring/Python/mRNA_structure_project/Week_2/RNAfold_output.fasta', 'w') as RNAfold_file:
-    RNAfold_file.write(rnafold_output)
