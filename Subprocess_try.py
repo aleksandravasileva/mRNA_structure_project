@@ -10,7 +10,6 @@ out_path = sys.argv[2]
 
 rnafold_proc = sp.Popen("RNAfold < {}".format(path), shell=True, stdout=sp.PIPE)
 
-rnafold_proc.wait()
 rnafold_result = rnafold_proc.communicate()[0].decode().splitlines()
 
 seq_name = rnafold_result[0][1:]
@@ -21,8 +20,6 @@ try:
     os.mkdir(out_path)
 except FileExistsError:
     print("Don't create directory next time", file=sys.stderr)
-    # Я все равно, правда, не понимаю, что происходит в этой команде
-    # Я потом могу отдельный файл с ошибками вывести или зачем это вообще?
 
 path_to_rnafold_file = '{}/{}_RNAfold_output.fasta'.format(out_path, seq_name)
 
