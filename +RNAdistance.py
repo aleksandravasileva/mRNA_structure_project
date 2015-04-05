@@ -4,22 +4,32 @@ import sys
 import subprocess as sp
 import os
 import os.path
+import tempfile
+import shutil
 
 def main():
-    abs_in_path, abs_out_path = parse_paths(*parse_args())
+    abs_in_path, abs_out_path = parse_args()
 
-    run_proc_rnafold(abs_in_path, abs_out_path)
+    # create output folder
+    os.makedirs("{}".format(abs_out_path), exist_ok=True)
 
-    running_mfold(abs_in_path, abs_out_path)
-    processing_mfold_output(abs_in_path, abs_out_path)
+    result_folding_rnafold = run_proc_rnafold(abs_in_path)
 
-    run_rnadistance(abs_in_path, abs_out_path)
+    result_folding_mfold = run_proc_mfold(abs_in_path)
+
+    run_rnadistance(abs_in_path, abs_out_path, result_folding_rnafold)
+
+    run_rnadistance(abs_in_path, abs_out_path, result_folding_mfold)
 
 def parse_args():
+    """Get paths to the input file and output directory
+    and convert them to absolute paths
+    """
+
     input_path = sys.argv[1]
     fasta_extensions = ['.fasta', '.fas', '.fsa', '.fa']
     if not any(input_path.lower().endswith(extension)
-        for extension in fasta_extensions):
+                  for extension in fasta_extensions):
         sys.exit("ERROR! Wrong input file format!")
 
     output_path="./mRNA_structure_project_out"
@@ -28,13 +38,8 @@ def parse_args():
     elif len(sys.argv) != 2:
         sys.exit("ERROR! Wrong number of arguments!")
 
-    return input_path, output_path
-
-def parse_paths(in_path, out_path):
-    """Return absolute paths to the input file and output directory"""
-
-    abs_in_path = os.path.abspath(in_path)
-    abs_out_path = os.path.abspath(out_path)
+    abs_in_path = os.path.abspath(input_path)
+    abs_out_path = os.path.abspath(output_path)
 
     return abs_in_path, abs_out_path
 
@@ -54,21 +59,21 @@ def get_seq_name(in_path):
 
     return seq_name
 
-def get_real_str(in_path, out_path):
+def get_real_structure(in_path):
     """Get real sequence structure in the dot-bracket form
      from the input file
     """
+
     with open(in_path, "r") as input_fasta:
         for line in input_fasta:
             if line[0] == "." or line[0] == "(":
                 return line.strip()
 
-def run_proc_rnafold(in_path, out_path):
-    """Run RNAfold and get dot-bracket structure with mfe from its output"""
-
-    # create folder for RNAfold main results (folder "Predictors_out"
-    # inside output folder)
-    os.makedirs("{}/Predictors_out".format(out_path), exist_ok=True)
+def run_proc_rnafold(in_path):
+    """Run RNAfold
+    Returns list of lists, containing predicted
+    structure in dot-bracket form and mfe.
+    """
 
     rnafold_proc = sp.Popen("RNAfold < {}".format(in_path), shell=True,
                             stdout=sp.PIPE)
@@ -78,37 +83,29 @@ def run_proc_rnafold(in_path, out_path):
     draft_folding_string = rnafold_result[2].split(" ")[0]
     mfe = rnafold_result[2].split(" ")[1]
 
-    # remember path to the main working directory
-    main_folder = os.getcwd()
-
-    # enter the main RNAfold results folder
-    os.chdir("{}/Predictors_out".format(out_path))
-
     seq_name = get_seq_name(in_path)
 
-    with open("./{}_RNAfold_output.fasta".format(seq_name),
-              "w") as rnafold_out:
-        rnafold_out.write(draft_folding_string)
-        rnafold_out.write("\n")
-        rnafold_out.write(mfe)
+    result_folding_list = ["{}_RNAfold_output".format(seq_name)]
 
-    # return to the main working directory
-    os.chdir(main_folder)
+    result_folding_list.append([draft_folding_string, mfe])
 
-def running_mfold(in_path, out_path):
-    """Run mfold"""
+    return result_folding_list
 
-    # create folders for mfold main (folder "Predictors_out")
-    # and intermediary results (folder "mfold_inter_out")
-    os.makedirs("{}/Predictors_out/mfold_inter_out".format(out_path),
-                exist_ok=True)
+def run_proc_mfold(in_path):
+    """Run mfold
+    Returns list of lists, containing predicted
+    structure in dot-bracket form and mfe.
+    """
+
+    # create temporary folder for mfold intermediary results
+    mfold_inter_out = tempfile.mkdtemp()
 
     # remember path to the main working directory
     main_folder = os.getcwd()
 
     # mfold writes its results only in working directory!
-    # enter the folder for intermediary results
-    os.chdir("{}/Predictors_out/mfold_inter_out".format(out_path))
+    # enter the temporary folder for intermediary results
+    os.chdir(mfold_inter_out)
 
     mfold_1_proc = sp.Popen("mfold SEQ='{}'".format(in_path), shell=True)
     mfold_1_proc.wait()
@@ -123,88 +120,62 @@ def running_mfold(in_path, out_path):
     mfold_2_proc.wait()
     print("\nmfold worked successfully!\n")
 
-    # return to the main working directory
-    os.chdir(main_folder)
-
-def processing_mfold_output(in_path, out_path):
-    """Get dot-bracket structure with mfe from mfold output"""
-
-    # remember path to the main working directory
-    main_folder = os.getcwd()
-
-    # enter the main mfold results folder
-    os.chdir("{}/Predictors_out".format(out_path))
-
-    file_name = get_file_name(in_path)
     seq_name = get_seq_name(in_path)
-    with open("./mfold_inter_out/{}.b".format(file_name)) as mfold_result:
+
+    result_folding_list = ["{}_mfold_output".format(seq_name)]
+
+    with open("{}/{}.b".format(mfold_inter_out, file_name)) as mfold_result:
         i = 0
         for line in mfold_result:
             if i != 0:
-                # main mfold output files should contain the name
-                # of RNA sequence,
-                # that's why seq_name variable is used
-                with open("./{}_mfold_output_{}.fasta".format(seq_name, i),
-                          "w") as mfold_out:
-                    # dot-bracket structure and the value of mfe are
-                    # divided by tabulation
-                    draft_folding_string = line.split("\t")[0]
-                    mfe = line.split("\t")[1]
-
-                    mfold_out.write(draft_folding_string)
-                    mfold_out.write("\n")
-                    mfold_out.write(mfe)
+                # dot-bracket structure and the value of mfe are
+                # divided by tabulation
+                draft_folding_string = line.split("\t")[0]
+                mfe = line.split("\t")[1].strip()
+                result_folding_list.append([draft_folding_string, mfe])
             i += 1
+
+    return result_folding_list
+
+    # remove temporary folder
+    shutil.rmtree(mfold_inter_out)
 
     # return to the main working directory
     os.chdir(main_folder)
 
-def run_rnadistance(in_path, out_path):
-    """Compare all predicted structures (from folder "Predictors_out")
-    with real structure using RNAdistance tool.
+def run_rnadistance(in_path, out_path, result_folding_tool):
+    """Compare all predicted structures with real structure using
+     RNAdistance tool.
     """
 
-    # create folders for RNAdistance main results (folder "RNAdistance_out")
-    # and intermediary files (folder "RNAdistance_inter")
-    os.makedirs("{}/RNAdistance_out/RNAdistance_inter".format(out_path),
-                exist_ok=True)
+    print("Comparing {} with real structure...".format(result_folding_tool[0]))
 
-    # create list containing names of all files with
-    # predicted structures (all files from "Predictors_out" folder)
-    all_files = []
-    pred_path = "{}/Predictors_out".format(out_path)
-    for file in os.listdir(pred_path):
-        if os.path.isfile(os.path.join(pred_path, file)):
-            all_files.append(file)
+    # create folder for RNAdistance main result
+    os.makedirs("{}/RNAdistance_out".format(out_path), exist_ok=True)
 
-    # remember path to the main working directory
-    main_folder = os.getcwd()
+    # create temporary folder for RNAdistance intermediary files
+    dist_inter_out = tempfile.mkdtemp()
 
-    # enter the main RNAdistance results folder
-    os.chdir("{}/RNAdistance_out".format(out_path))
-
-    # for each predicted structure create new file
-    # containing this structure and the real structure
-
+    # for each predicted structure create file containing
+    # this structure and the real structure
     # this file is an input for the RNAdistance
-    real_str = get_real_str(in_path, out_path)
-    for file in all_files:
-        with open("{}/Predictors_out/{}".format(out_path, file), "r")\
-                as pred_str_file:
-            file_name = get_file_name("{}/Predictors_out/{}".format(out_path,
-                                                                    file))
-
-            with open("./RNAdistance_inter/{}_for_dist.fasta".format(file_name),
-                "w") as file_for_dist:
-                file_for_dist.write(pred_str_file.readline().strip())
+    real_structure = get_real_structure(in_path)
+    i = 0
+    for structure in result_folding_tool:
+        if i != 0:
+            with open("{}/{}_{}".format(dist_inter_out, result_folding_tool[0],
+                                                     i), "w") as file_for_dist:
+                file_for_dist.write(structure[0])
                 file_for_dist.write("\n")
-                file_for_dist.write(real_str)
+                file_for_dist.write(real_structure)
+        i += 1
 
-    with open ("./All_distances.txt", "w") as dist_out_file:
-        for file in os.listdir("./RNAdistance_inter"):
-            path_to_file = "./RNAdistance_inter/{}".format(file)
+    with open ("{}/RNAdistance_out/{}_distances.txt".format(out_path,
+                      result_folding_tool[0]), "w") as dist_out_file:
+        for file in os.listdir(dist_inter_out):
+            path_to_file = "{}/{}".format(dist_inter_out, file)
             rnadist_proc = sp.Popen("RNAdistance < {}".format(path_to_file),
-                                    shell=True, stdout=sp.PIPE)
+                                                 shell=True, stdout=sp.PIPE)
             rnadist_result = rnadist_proc.communicate()[0].decode()
 
             dist_out_file.write(file)
@@ -215,8 +186,8 @@ def run_rnadistance(in_path, out_path):
 
     print("\nRNAdistance worked successfully!\n")
 
-    # return to the main working directory
-    os.chdir(main_folder)
+    # remove temporary folder
+    shutil.rmtree(dist_inter_out)
 
 if __name__ == '__main__':
     main()
