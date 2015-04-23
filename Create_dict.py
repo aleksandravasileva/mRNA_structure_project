@@ -1,6 +1,9 @@
+# Имя файла Create_dict теперь не очень подходит. Потом исправлю
+
 import sys
 import os
 import subprocess as sp
+import collections
 
 def main():
     abs_in_path, abs_out_path = parse_args()
@@ -8,9 +11,11 @@ def main():
     # create output folder
     os.makedirs("{}".format(abs_out_path), exist_ok=True)
 
-    mrna_dict = create_dict(abs_in_path)
+    rna_collection = create_mRNA_structure_collection(abs_in_path)
+    print(rna_collection)
 
-    rnafold_dict = run_proc_rnafold(mrna_dict)
+    rnafold_collection = run_proc_rnafold(rna_collection)
+    print(rnafold_collection)
 
 def parse_args():
     """Get paths to the input file and output directory
@@ -30,73 +35,84 @@ def parse_args():
 
     return abs_in_path, abs_out_path
 
-def create_dict(in_put):
-    """Takes input file and creates dictionary, containing name of the sequence
-    as the key and the list with RNA sequence and its real structure in
-    dot-bracket form as the value.
+def create_mRNA_structure_collection(path_to_input):
+    """Takes input file and creates list, containing named tuples of
+    experimentally proved RNA structures names, their sequences and
+    structures in dot-bracket form.
     """
 
-    mrna_dict = dict()
+    mrna_collection = []
 
-    with open(in_put, "r") as input_file:
-        line = input_file.readlines()
-        i = 0
+    with open(path_to_input, "r") as input_file:
+        lines = input_file.readlines()
+        lines_iter = iter(lines)
 
-        while i < len(line):
-            if line[i].strip() == "":
-                i += 1
+    i = 0
+
+    for i in range(len(lines)):
+        try:
+            line = next(lines_iter)
+
+            if not line.strip():
                 continue
+            if line[0] == ">":
+                name_of_seq = line[1:].strip()
+                line = next(lines_iter)
 
-            if line[i][0] == ">":
-                name_of_seq = line[i][1:].strip()
-                i += 1
+                first_sym = line[0]
+                while first_sym < "A" or first_sym > "Z":
+                    line = next(lines_iter)
 
-                first_sym = line[i][0]
-                while ord(first_sym) < 65 or ord(first_sym) > 90:
-                    i += 1
-                seq = line[i].strip()
-                i += 1
+                seq = line.strip()
+                line = next(lines_iter)
 
-                first_sym = line[i][0]
+                first_sym = line[0]
                 while first_sym != "(" and first_sym != ".":
-                    i += 1
-                structure = line[i].strip()
+                    line = next(lines_iter)
 
-                mrna_dict[name_of_seq] = [seq, structure]
+                structure = line.strip()
+
+                mRNA_tuple = collections.namedtuple("mRNA_tuple", ["name_of_seq",
+                                                    "seq", "structure"])
+                m_t = mRNA_tuple(name_of_seq, seq, structure)
+                mrna_collection.append(m_t)
             i += 1
-    return mrna_dict
+        except StopIteration:
+            break
 
-def run_proc_rnafold(input_dict):
+    return mrna_collection
+
+def run_proc_rnafold(input_collection):
     """Run RNAfold
-    Returns dictionary, containing (name of the sequence + "_RNAfold_output")
-    as the key and list with structure in dot-bracket form and mfe
-    as the value.
+    Takes collection of RNA structures as input.
+    Returns list, containing named tuples of RNAfold predicted structures names,
+    predicted structures in dot-bracket form and their mfe.
     """
 
-    rna_fold_dict = dict()
-    for key, value in input_dict.items():
-        print("\nRunning RNAfold for {}...\n".format(key))
+    rnafold_collection = []
 
-        rnafold_proc = sp.Popen(["RNAfold"], shell=True, stdin=value[0],
+    for el in input_collection:
+        print("\nRunning RNAfold for {}...\n".format(el.name_of_seq))
+
+        rnafold_proc = sp.Popen("RNAfold", shell=True, stdin=sp.PIPE,
                                 stdout=sp.PIPE)
 
-        # И вот с этого момента ничего не хочет работать.
-        # Я не понимаю, как перехватить правильно stdin
-        
-        # AttributeError: 'str' object has no attribute 'fileno'
-        # Что бы вот это все значило...
-
-
-        rnafold_result = rnafold_proc.communicate()[0].decode().splitlines()
+        rnafold_raw_result = rnafold_proc.communicate(el.seq.encode())
+        rnafold_result = rnafold_raw_result[0].decode().splitlines()
 
         print("\nRNAfold worked successfully!\n")
-        draft_folding_string = rnafold_result[2].split(" ")[0]
-        mfe = rnafold_result[2].split(" ")[1]
-        rnafold_key_name = "{}_RNAfold_output".format(key)
-        rna_fold_dict[rnafold_key_name] = [draft_folding_string, mfe]
 
-    print(rna_fold_dict)
-    return rna_fold_dict
+        draft_folding_string = rnafold_result[1].split(" ")[0]
+        mfe = rnafold_result[1].split(" ")[1][1:][:-1]
+        structure_name = "{}_RNAfold_output".format(el.name_of_seq)
+
+        RNAfold_tuple = collections.namedtuple("RNAfold_tuple",
+                                        ["structure_name", "structure", "mfe"])
+        r_t = RNAfold_tuple(structure_name, draft_folding_string, mfe)
+        rnafold_collection.append(r_t)
+
+    print(rnafold_collection)
+    return rnafold_collection
 
 
 if __name__ == '__main__':
