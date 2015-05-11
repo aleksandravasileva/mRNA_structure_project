@@ -6,15 +6,15 @@ import subprocess as sp
 import collections
 
 def main():
-    abs_in_path, abs_out_path = parse_args()
+    input_filename, output_folder = parse_args()
 
     # create output folder
-    os.makedirs("{}".format(abs_out_path), exist_ok=True)
+    os.makedirs(output_folder, exist_ok=True)
 
-    rna_collection = create_mRNA_structure_collection(abs_in_path)
+    rna_collection = create_mRNA_structure_collection(input_filename)
     print(rna_collection)
 
-    rnafold_collection = run_proc_rnafold(rna_collection)
+    rnafold_collection = run_rnafold_for_collection(rna_collection)
     print(rnafold_collection)
 
 def parse_args():
@@ -35,6 +35,7 @@ def parse_args():
 
     return abs_in_path, abs_out_path
 
+
 def create_mRNA_structure_collection(path_to_input):
     """Takes input file and creates list, containing named tuples of
     experimentally proved RNA structures names, their sequences and
@@ -43,72 +44,76 @@ def create_mRNA_structure_collection(path_to_input):
 
     mrna_collection = []
 
+    RnaStructureInfo = collections.namedtuple("mRNA_tuple", ["name", "seq",
+                                                       "structure"])
+
     with open(path_to_input, "r") as input_file:
-        lines = input_file.readlines()
-        lines_iter = iter(lines)
+        for line in input_file:
+            try:
+                if not line.strip():
+                    continue
+                if line[0] == ">":
+                    name_of_seq = line[1:].strip()
+                    line = next(input_file)
 
-    i = 0
+                    first_sym = line[0]
+                    while first_sym.upper() < "A" or first_sym.upper() > "Z":
+                        line = next(input_file)
 
-    for i in range(len(lines)):
-        try:
-            line = next(lines_iter)
+                    seq = line.strip()
+                    line = next(input_file)
 
-            if not line.strip():
-                continue
-            if line[0] == ">":
-                name_of_seq = line[1:].strip()
-                line = next(lines_iter)
+                    first_sym = line[0]
+                    while first_sym != "(" and first_sym != ".":
+                        line = next(input_file)
 
-                first_sym = line[0]
-                while first_sym < "A" or first_sym > "Z":
-                    line = next(lines_iter)
+                    structure = line.strip()
 
-                seq = line.strip()
-                line = next(lines_iter)
-
-                first_sym = line[0]
-                while first_sym != "(" and first_sym != ".":
-                    line = next(lines_iter)
-
-                structure = line.strip()
-
-                mRNA_tuple = collections.namedtuple("mRNA_tuple", ["name_of_seq",
-                                                    "seq", "structure"])
-                m_t = mRNA_tuple(name_of_seq, seq, structure)
-                mrna_collection.append(m_t)
-            i += 1
-        except StopIteration:
-            break
+                    m_t = RnaStructureInfo(name_of_seq, seq, structure)
+                    mrna_collection.append(m_t)
+            except StopIteration:
+                break
 
     return mrna_collection
 
-def run_proc_rnafold(input_collection):
-    """Run RNAfold
+def run_rnafold_for_one_seq(name, seq):
+    """Run RNAfold for one sequence
     Takes collection of RNA structures as input.
+    Returns tuple containing RNAfold predicted structure and its mfe,
+    """
+
+    print("\nRunning RNAfold for {}...\n".format(name))
+
+    rnafold_proc = sp.Popen("RNAfold", shell=True, stdin=sp.PIPE,
+                            stdout=sp.PIPE)
+
+    rnafold_raw_result = rnafold_proc.communicate(seq.encode())
+    rnafold_result = rnafold_raw_result[0].decode().splitlines()
+
+    print("\nRNAfold worked successfully!\n")
+
+    draft_folding_string = rnafold_result[1].split(" ")[0]
+    mfe = rnafold_result[1].split(" ")[1][1:][:-1]
+
+    return draft_folding_string, mfe
+
+def run_rnafold_for_collection(input_collection):
+    """Run RNAfold for collection of sequences
     Returns list, containing named tuples of RNAfold predicted structures names,
     predicted structures in dot-bracket form and their mfe.
     """
 
     rnafold_collection = []
 
+    RNAfold_result = collections.namedtuple("RNAfold_tuple", ["structure_name",
+                                            "structure", "mfe"])
+
     for el in input_collection:
-        print("\nRunning RNAfold for {}...\n".format(el.name_of_seq))
+        structure_name = "{}_RNAfold_output".format(el.name)
 
-        rnafold_proc = sp.Popen("RNAfold", shell=True, stdin=sp.PIPE,
-                                stdout=sp.PIPE)
+        draft_folding_string, mfe = run_rnafold_for_one_seq(el.name, el.seq)
 
-        rnafold_raw_result = rnafold_proc.communicate(el.seq.encode())
-        rnafold_result = rnafold_raw_result[0].decode().splitlines()
-
-        print("\nRNAfold worked successfully!\n")
-
-        draft_folding_string = rnafold_result[1].split(" ")[0]
-        mfe = rnafold_result[1].split(" ")[1][1:][:-1]
-        structure_name = "{}_RNAfold_output".format(el.name_of_seq)
-
-        RNAfold_tuple = collections.namedtuple("RNAfold_tuple",
-                                        ["structure_name", "structure", "mfe"])
-        r_t = RNAfold_tuple(structure_name, draft_folding_string, mfe)
+        r_t = RNAfold_result(structure_name, draft_folding_string, mfe)
         rnafold_collection.append(r_t)
 
     print(rnafold_collection)
