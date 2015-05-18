@@ -3,7 +3,9 @@
 import sys
 import os
 import subprocess as sp
-import collections
+from collections import namedtuple
+import tempfile
+import shutil
 
 def main():
     input_filename, output_folder = parse_args()
@@ -17,26 +19,29 @@ def main():
     rnafold_collection = run_rnafold_for_collection(rna_collection)
     print(rnafold_collection)
 
+    mfold_collection = run_mfold_for_collection(rna_collection)
+    print(mfold_collection)
+
 def parse_args():
     """Get paths to the input file and output directory
     and convert them to absolute paths
     """
 
-    input_path = sys.argv[1]
+    input_filename = sys.argv[1]
 
-    output_path="./mRNA_structure_project_out"
+    output_folder="./mRNA_structure_project_out"
     if len(sys.argv) == 3:
-        output_path = sys.argv[2]
+        output_folder = sys.argv[2]
     elif len(sys.argv) != 2:
         sys.exit("ERROR! Wrong number of arguments!")
 
-    abs_in_path = os.path.abspath(input_path)
-    abs_out_path = os.path.abspath(output_path)
+    abs_in_path = os.path.abspath(input_filename)
+    abs_out_path = os.path.abspath(output_folder)
 
     return abs_in_path, abs_out_path
 
 
-def create_mRNA_structure_collection(path_to_input):
+def create_mRNA_structure_collection(input_filename):
     """Takes input file and creates list, containing named tuples of
     experimentally proved RNA structures names, their sequences and
     structures in dot-bracket form.
@@ -44,10 +49,10 @@ def create_mRNA_structure_collection(path_to_input):
 
     mrna_collection = []
 
-    RnaStructureInfo = collections.namedtuple("mRNA_tuple", ["name", "seq",
-                                                       "structure"])
+    RnaStructureInfo = namedtuple("RnaStructureInfo", ["name", "seq",
+                                                       "real_structure"])
 
-    with open(path_to_input, "r") as input_file:
+    with open(input_filename, "r") as input_file:
         for line in input_file:
             try:
                 if not line.strip():
@@ -69,17 +74,51 @@ def create_mRNA_structure_collection(path_to_input):
 
                     structure = line.strip()
 
-                    m_t = RnaStructureInfo(name_of_seq, seq, structure)
-                    mrna_collection.append(m_t)
+                    mRNA_tuple = RnaStructureInfo(name_of_seq, seq, structure)
+                    mrna_collection.append(mRNA_tuple)
             except StopIteration:
                 break
 
     return mrna_collection
 
-def run_rnafold_for_one_seq(name, seq):
-    """Run RNAfold for one sequence
-    Takes collection of RNA structures as input.
-    Returns tuple containing RNAfold predicted structure and its mfe,
+def run_rnadistance(structure_name, pred_structure, real_structure):
+    """Compare predicted structure with real structure using
+     RNAdistance tool.
+    """
+
+    # create temporary folder for RNAdistance intermediary files
+    dist_inter= tempfile.mkdtemp()
+
+    # remember path to the main working directory
+    main_folder = os.getcwd()
+
+    # enter the temporary folder for intermediary files
+    os.chdir(dist_inter)
+
+    path_to_file = "./{}_vs_real_structure.txt".format(structure_name)
+
+    with open(path_to_file, "w") as file_for_dist:
+        file_for_dist.write(pred_structure)
+        file_for_dist.write('\n')
+        file_for_dist.write(real_structure)
+
+    rnadist_proc = sp.Popen("RNAdistance < {}".format(path_to_file),
+                                                 shell=True, stdout=sp.PIPE)
+    rnadist_result = rnadist_proc.communicate()[0].decode().strip()
+
+    # remove temporary folder
+    shutil.rmtree(dist_inter)
+
+    # return to the main working directory
+    os.chdir(main_folder)
+
+    return rnadist_result
+
+def run_rnafold_for_one_seq(name, seq, real_structure):
+    """Run RNAfold and RNAdistance for one sequence
+    Takes RNA nucleotide sequence with its name and real structure as input.
+    Returns tuple containing RNAfold predicted structure, its mfe and distance
+    to real structure,
     """
 
     print("\nRunning RNAfold for {}...\n".format(name))
@@ -88,36 +127,126 @@ def run_rnafold_for_one_seq(name, seq):
                             stdout=sp.PIPE)
 
     rnafold_raw_result = rnafold_proc.communicate(seq.encode())
-    rnafold_result = rnafold_raw_result[0].decode().splitlines()
+    rnafold_result = rnafold_raw_result[0].decode().splitlines()[1].split()
 
     print("\nRNAfold worked successfully!\n")
 
-    draft_folding_string = rnafold_result[1].split(" ")[0]
-    mfe = rnafold_result[1].split(" ")[1][1:][:-1]
+    draft_folding_string = rnafold_result[0]
+    mfe = rnafold_result[1][1:][:-1]
 
-    return draft_folding_string, mfe
+    dist = run_rnadistance(name, draft_folding_string, real_structure)
+
+    return draft_folding_string, mfe, dist
 
 def run_rnafold_for_collection(input_collection):
     """Run RNAfold for collection of sequences
-    Returns list, containing named tuples of RNAfold predicted structures names,
-    predicted structures in dot-bracket form and their mfe.
+    Returns dictionary, containing name of the structure as a key and
+    named tuple RNAfold predicted structure in dot-bracket form, its
+    mfe and distance to real structure as a value.
     """
 
-    rnafold_collection = []
+    rnafold_collection = dict()
 
-    RNAfold_result = collections.namedtuple("RNAfold_tuple", ["structure_name",
-                                            "structure", "mfe"])
+    RNAfold_result = namedtuple("RNAfold_result", ["structure", "mfe",
+                                                   "distance"])
 
     for el in input_collection:
-        structure_name = "{}_RNAfold_output".format(el.name)
+        structure_name = el.name
 
-        draft_folding_string, mfe = run_rnafold_for_one_seq(el.name, el.seq)
+        draft_folding_string, mfe, dist = run_rnafold_for_one_seq(el.name,
+                                                el.seq, el.real_structure)
 
-        r_t = RNAfold_result(structure_name, draft_folding_string, mfe)
-        rnafold_collection.append(r_t)
-
-    print(rnafold_collection)
+        rnafold_collection[structure_name] = RNAfold_result(draft_folding_string,
+                                                            mfe, dist)
     return rnafold_collection
+
+def run_mfold_for_one_seq(name, seq, real_structure):
+    """Run mfold and RNAdistance for one sequence
+    Takes RNA nucleotide sequence with its name and real structure as input.
+    mfold returns several structures for each sequences (optimal and
+    suboptimal).
+    As a result this function returns list containing named tuples of
+    counting number of mfold predicted structure,
+    predicted structure in dot-bracket form, its mfe and distance to
+    real structure.
+    """
+
+    mfold_result = namedtuple("mfold_result", ["structure_name",
+                                            "structure", "mfe", "distance"])
+
+    #Temporary file in fasta format containing RNA sequence should be created
+    #This file will be passed to mfold as an input
+
+    # create temporary folder for mfold input and intermediary results
+    mfold_inter_out = tempfile.mkdtemp()
+
+    # remember path to the main working directory
+    main_folder = os.getcwd()
+
+    # mfold writes its results only in working directory!
+    # enter the temporary folder for intermediary results
+    os.chdir(mfold_inter_out)
+
+    with open('./{}.fasta'.format(name), 'w') as mfold_input:
+        mfold_input.write('>')
+        mfold_input.write(name)
+        mfold_input.write('\n')
+        mfold_input.write(seq)
+        mfold_input.write('\n')
+
+    mfold_1_proc = sp.Popen("mfold SEQ='./{}.fasta'".format(name), shell=True)
+    mfold_1_proc.wait()
+
+    # script Ct2B.pl should be located in the main working directory
+
+    # mfold intermediary files contain the name of input file,
+
+    mfold_2_proc = sp.Popen("{0}/Ct2B.pl {1}.ct > {1}.b".format(main_folder,
+                                                     name), shell=True)
+    mfold_2_proc.wait()
+
+    print("\nmfold worked successfully!\n")
+
+    mfold_list = []
+
+    with open("{}/{}.b".format(mfold_inter_out, name)) as mfold_output:
+       i = 0
+       for line in mfold_output:
+           if i != 0:
+               # dot-bracket structure and the value of mfe are
+               # divided by tabulation
+               raw_result = line.strip().split("\t")
+               structure_name = str(i)
+               draft_folding_string = raw_result[0]
+               mfe = raw_result[1][1:][:-1]
+               dist = run_rnadistance(name, draft_folding_string, real_structure)
+               mfold_tuple = mfold_result(structure_name, draft_folding_string, mfe, dist)
+               mfold_list.append(mfold_tuple)
+           i += 1
+
+    # remove temporary folder
+    shutil.rmtree(mfold_inter_out)
+
+    # return to the main working directory
+    os.chdir(main_folder)
+
+    return mfold_list
+
+def run_mfold_for_collection(input_collection):
+    """Run mfold for collection of sequences
+    Returns dictionary, containing name of the structure as a key and list of
+    named tuples of mfold predicted structure counting number, predicted
+    structure in dot-bracket form, its mfe and distance to real structure as
+    a value.
+    """
+
+    mfold_dict = dict()
+
+    for el in input_collection:
+        mfold_dict[el.name] = run_mfold_for_one_seq(el.name, el.seq, el.real_structure)
+
+    return mfold_dict
+
 
 
 if __name__ == '__main__':
