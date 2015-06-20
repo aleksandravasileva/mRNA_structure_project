@@ -1,40 +1,41 @@
 import subprocess as sp
-from collections import namedtuple
 from working_with_RNAdistance import run_rnadistance
 import logging
+import datatypes as dt
 
 
-def run_rnafold_for_one_seq(name, seq, real_structure):
+def run_rnafold_for_one_seq(mRNA_tuple):
     """Run RNAfold and RNAdistance for one sequence
     Takes RNA nucleotide sequence with its name and real structure as input.
     Returns named tuple containing RNAfold predicted structure in dot-bracket
-    form, its mfe and distance to real structure as a value,
+    form, its nucleotide sequence, mfe and distance to real structure,
     """
 
     module_logger = logging.getLogger('mRNA_structure_project.RNAfold')
 
-    module_logger.info("Running RNAfold for %s...", name)
+    module_logger.info("Running RNAfold for %s...", mRNA_tuple.name)
 
     rnafold_proc = sp.Popen("RNAfold", shell=True, stdin=sp.PIPE,
-                            stdout=sp.PIPE)
+                            stdout=sp.PIPE, stderr=sp.PIPE)
 
-    rnafold_stdout = rnafold_proc.communicate(seq.encode())
-    rnafold_result = rnafold_stdout[0].decode().splitlines()[1].split()
+    rnafold_stdout, rnafold_stderr = rnafold_proc.communicate(mRNA_tuple.seq.encode())
+    rnafold_result = rnafold_stdout.decode().splitlines()[1].split()
     #Rnafold returns input nucleotide sequence (1st line) and its structure
     #with mfe (2nd line).
 
-    module_logger.info("RNAfold finished its work")
+    rnafold_error = rnafold_stderr.decode()
+    if rnafold_error != '':
+        module_logger.warning("RNAfold worked with errors:\n%s...", rnafold_error)
 
-    RNAfold_result = namedtuple("RNAfold_result", ["structure", "mfe",
-                                "distance"])
+    module_logger.info("RNAfold finished its work")
 
     folding_string = rnafold_result[0]
     #RNAfold returns mfe as '(mfe_value)'
-    mfe = rnafold_result[1][1:][:-1]
+    mfe = float(rnafold_result[1][1:][:-1])
 
-    dist = run_rnadistance(folding_string, real_structure)
+    dist = run_rnadistance(folding_string, mRNA_tuple.real_structure)
 
-    rnafold_tuple = RNAfold_result(folding_string, mfe, dist)
+    rnafold_tuple = dt.RNAfoldResult(mRNA_tuple.seq, folding_string, mfe, dist)
 
     return rnafold_tuple
 
@@ -42,15 +43,8 @@ def run_rnafold_for_one_seq(name, seq, real_structure):
 def run_rnafold_for_collection(input_collection):
     """Run RNAfold for collection of sequences
     Returns dictionary, containing name of the structure as a key and
-    named tuple RNAfold predicted structure in dot-bracket form, its
-    mfe and distance to real structure as a value.
+    named tuple of RNAfold predicted structure in dot-bracket form, its
+    nucleotide sequence, mfe and distance to real structure as a value.
     """
 
-    rnafold_collection = {}
-
-    for el in input_collection:
-        structure_name = el.name
-
-        rnafold_collection[structure_name] = run_rnafold_for_one_seq(el.name,
-                                                                     el.seq, el.real_structure)
-    return rnafold_collection
+    return {el.name: run_rnafold_for_one_seq(el) for el in input_collection}

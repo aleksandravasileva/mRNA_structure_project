@@ -12,6 +12,6 @@ def run_rnadistance(pred_structure, real_structure):
 
     rnadist_stdout = rnadist_proc.communicate(dist_input.encode())
     #RNAdistance returns distance as 'f: distance_value'
-    rnadist_result = rnadist_stdout[0].decode().strip().split()[1]
+    rnadist_result = int(rnadist_stdout[0].decode().strip().split()[1])
 
     return rnadist_result
