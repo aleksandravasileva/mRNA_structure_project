@@ -1,7 +1,7 @@
 import subprocess as sp
 
 
-def run_rnadistance(pred_structure, real_structure):
+def get_distance(pred_structure, real_structure):
     """Compare predicted structure with real structure using
      RNAdistance tool.
     """

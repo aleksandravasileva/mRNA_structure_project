@@ -1,6 +1,6 @@
 import sys
-import working_with_RNAfold as rf
-import working_with_mfold as mf
+import rnafold as rf
+import mfold as mf
 import logging
 import os
 import datatypes as dt
@@ -14,20 +14,15 @@ def main():
     logger = create_logger('mRNA_structure_project')
 
     rna_collection = create_mRNA_structure_collection(input_filename)
-    logger.debug('RNA structures collection:\n%s', rna_collection)
     logger.info('Created RNA structures collection')
+    logger.debug('RNA structures collection:\n%s', rna_collection)
 
-    rnafold_collection = rf.run_rnafold_for_collection(rna_collection)
+    rnafold_collection = rf.run_for_collection(rna_collection)
     logger.info('Created RNAfold predicted structures collection')
     logger.debug('RNAfold predicted structures collection:\n%s',
                  rnafold_collection)
 
-    mfold_collection = mf.run_mfold_for_collection(rna_collection)
-    logger.info('Created mfold predicted structures collection')
-    logger.debug('RNAfold predicted structures collection:\n%s',
-                 mfold_collection)
-
-    best_mfold_collection = mf.create_mfold_best_structures_collection(mfold_collection)
+    best_mfold_collection = mf.create_best_structures_collection(rna_collection)
     logger.info('Created collection of the best mfold predicted structures')
     logger.debug('Best mfold predicted structures collection:\n%s',
                  best_mfold_collection)
@@ -39,8 +34,12 @@ def main():
     create_forna_files_for_collection(rnafold_collection, forna_folder,
                                       "RNAfold")
 
+    logger.info('Created files of RNAfold predictions for forna')
+
     create_forna_files_for_collection(best_mfold_collection, forna_folder,
                                       "mfold")
+
+    logger.info('Created files of mfold predictions for forna')
 
 
 def create_logger(name):

@@ -1,10 +1,10 @@
 import subprocess as sp
-from working_with_RNAdistance import run_rnadistance
+from rnadistance import get_distance
 import logging
 import datatypes as dt
 
 
-def run_rnafold_for_one_seq(mRNA_tuple):
+def run_for_one_seq(mRNA_tuple):
     """Run RNAfold and RNAdistance for one sequence
     Takes RNA nucleotide sequence with its name and real structure as input.
     Returns named tuple containing RNAfold predicted structure in dot-bracket
@@ -29,22 +29,26 @@ def run_rnafold_for_one_seq(mRNA_tuple):
 
     module_logger.info("RNAfold finished its work")
 
+    #RNAfold returns only one optimal structure
+    optimality = "optimal"
+
     folding_string = rnafold_result[0]
     #RNAfold returns mfe as '(mfe_value)'
     mfe = float(rnafold_result[1][1:][:-1])
 
-    dist = run_rnadistance(folding_string, mRNA_tuple.real_structure)
+    dist = get_distance(folding_string, mRNA_tuple.real_structure)
 
-    rnafold_tuple = dt.RNAfoldResult(mRNA_tuple.seq, folding_string, mfe, dist)
+    rnafold_tuple = dt.FoldResult(optimality, mRNA_tuple.seq, folding_string,
+                                  mfe, dist)
 
     return rnafold_tuple
 
 
-def run_rnafold_for_collection(input_collection):
+def run_for_collection(input_collection):
     """Run RNAfold for collection of sequences
     Returns dictionary, containing name of the structure as a key and
     named tuple of RNAfold predicted structure in dot-bracket form, its
     nucleotide sequence, mfe and distance to real structure as a value.
     """
 
-    return {el.name: run_rnafold_for_one_seq(el) for el in input_collection}
+    return {el.name: run_for_one_seq(el) for el in input_collection}
