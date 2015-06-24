@@ -4,14 +4,15 @@ import logging
 import datatypes as dt
 
 
-def run_for_one_seq(mRNA_tuple):
+def get_structs_for_one_seq(mRNA_tuple, name_of_logger):
     """Run RNAfold and RNAdistance for one sequence
     Takes RNA nucleotide sequence with its name and real structure as input.
     Returns named tuple containing RNAfold predicted structure in dot-bracket
     form, its nucleotide sequence, mfe and distance to real structure,
     """
+    global module_logger
 
-    module_logger = logging.getLogger('mRNA_structure_project.RNAfold')
+    module_logger = logging.getLogger(name_of_logger +'.RNAfold')
 
     module_logger.info("Running RNAfold for %s...", mRNA_tuple.name)
 
@@ -30,7 +31,7 @@ def run_for_one_seq(mRNA_tuple):
     module_logger.info("RNAfold finished its work")
 
     #RNAfold returns only one optimal structure
-    optimality = "optimal"
+    is_optimal = True
 
     folding_string = rnafold_result[0]
     #RNAfold returns mfe as '(mfe_value)'
@@ -38,17 +39,18 @@ def run_for_one_seq(mRNA_tuple):
 
     dist = get_distance(folding_string, mRNA_tuple.real_structure)
 
-    rnafold_tuple = dt.FoldResult(optimality, mRNA_tuple.seq, folding_string,
+    rnafold_tuple = dt.FoldResult(is_optimal, mRNA_tuple.seq, folding_string,
                                   mfe, dist)
 
     return rnafold_tuple
 
 
-def run_for_collection(input_collection):
+def get_structs_for_collection(input_collection, name_of_logger):
     """Run RNAfold for collection of sequences
     Returns dictionary, containing name of the structure as a key and
     named tuple of RNAfold predicted structure in dot-bracket form, its
     nucleotide sequence, mfe and distance to real structure as a value.
     """
 
-    return {el.name: run_for_one_seq(el) for el in input_collection}
+    return {el.name: get_structs_for_one_seq(el, name_of_logger)
+            for el in input_collection}

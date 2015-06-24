@@ -1,9 +1,10 @@
 import sys
-import rnafold as rf
-import mfold as mf
+import rnafold
+import mfold
 import logging
 import os
-import datatypes as dt
+import datatypes
+from rnaeval import get_mfe
 
 def main():
     input_filename, output_folder = parse_args()
@@ -11,18 +12,23 @@ def main():
     #create main output folder
     os.makedirs(output_folder, exist_ok=True)
 
-    logger = create_logger('mRNA_structure_project')
+    # logger output will be written in the file in output_folder
+    # named as output_folder
+    name_of_logger = os.path.basename(output_folder)
+    logger = create_logger(name_of_logger, output_folder)
 
     rna_collection = create_mRNA_structure_collection(input_filename)
     logger.info('Created RNA structures collection')
     logger.debug('RNA structures collection:\n%s', rna_collection)
 
-    rnafold_collection = rf.run_for_collection(rna_collection)
+    rnafold_collection = rnafold.get_structs_for_collection(rna_collection,
+                                                            name_of_logger)
     logger.info('Created RNAfold predicted structures collection')
     logger.debug('RNAfold predicted structures collection:\n%s',
                  rnafold_collection)
 
-    best_mfold_collection = mf.create_best_structures_collection(rna_collection)
+    best_mfold_collection = mfold.get_best_structs_collection(rna_collection,
+                                                              name_of_logger)
     logger.info('Created collection of the best mfold predicted structures')
     logger.debug('Best mfold predicted structures collection:\n%s',
                  best_mfold_collection)
@@ -42,11 +48,11 @@ def main():
     logger.info('Created files of mfold predictions for forna')
 
 
-def create_logger(name):
+def create_logger(name, output_folder):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 
-    logging_file = name + '.log'
+    logging_file = output_folder + '/' + name + '.log'
 
     fh = logging.FileHandler(logging_file, mode='w')
     fh.setLevel(logging.DEBUG)
@@ -118,7 +124,9 @@ def get_structure_from_input(input_lines, number):
         structure = line.strip()
         break
 
-    mRNA_tuple = dt.RnaStructureInfo(name_of_seq, seq, structure)
+    mfe = get_mfe(seq, structure)
+
+    mRNA_tuple = datatypes.RnaStructureInfo(name_of_seq, seq, structure, mfe)
 
     return mRNA_tuple, number
 
