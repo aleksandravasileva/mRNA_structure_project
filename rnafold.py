@@ -1,20 +1,20 @@
 import subprocess as sp
-from rnadistance import get_distance
+import rnadistance as rnadist
 import logging
 import datatypes as dt
 
 
-def get_structs_for_one_seq(mRNA_tuple, name_of_logger):
+def get_structs_for_one_seq(name, mRNA_tuple, name_of_logger):
     """Run RNAfold and RNAdistance for one sequence
     Takes RNA nucleotide sequence with its name and real structure as input.
     Returns named tuple containing RNAfold predicted structure in dot-bracket
-    form, its nucleotide sequence, mfe and distance to real structure,
+    form, its nucleotide sequence, mfe and distances to real structure,
     """
     global module_logger
 
     module_logger = logging.getLogger(name_of_logger +'.RNAfold')
 
-    module_logger.info("Running RNAfold for %s...", mRNA_tuple.name)
+    module_logger.info("Running RNAfold for %s...", name)
 
     rnafold_proc = sp.Popen("RNAfold", shell=True, stdin=sp.PIPE,
                             stdout=sp.PIPE, stderr=sp.PIPE)
@@ -37,10 +37,14 @@ def get_structs_for_one_seq(mRNA_tuple, name_of_logger):
     #RNAfold returns mfe as '(mfe_value)'
     mfe = float(rnafold_result[1][1:][:-1])
 
-    dist = get_distance(folding_string, mRNA_tuple.real_structure)
+    tree_dist = rnadist.get_tree_dist(folding_string, mRNA_tuple.structure)
+    n_tree_dist = rnadist.get_n_tree_dist(folding_string, mRNA_tuple.structure)
 
-    rnafold_tuple = dt.FoldResult(is_optimal, mRNA_tuple.seq, folding_string,
-                                  mfe, dist)
+    bp_dist = rnadist.get_bp_dist(folding_string, mRNA_tuple.structure)
+    n_bp_dist = rnadist.get_n_bp_dist(folding_string, mRNA_tuple.structure)
+
+    rnafold_tuple = dt.FoldResult(is_optimal, mRNA_tuple.seq, folding_string, mfe,
+                                  tree_dist, n_tree_dist, bp_dist, n_bp_dist)
 
     return rnafold_tuple
 
@@ -49,8 +53,7 @@ def get_structs_for_collection(input_collection, name_of_logger):
     """Run RNAfold for collection of sequences
     Returns dictionary, containing name of the structure as a key and
     named tuple of RNAfold predicted structure in dot-bracket form, its
-    nucleotide sequence, mfe and distance to real structure as a value.
+    nucleotide sequence, mfe and distances to real structure as a value.
     """
-
-    return {el.name: get_structs_for_one_seq(el, name_of_logger)
-            for el in input_collection}
+    return {key: get_structs_for_one_seq(key, value, name_of_logger)
+            for key, value in input_collection.items()}

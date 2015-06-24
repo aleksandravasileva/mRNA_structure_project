@@ -1,7 +1,8 @@
 from collections import namedtuple
 
-RnaStructureInfo = namedtuple("RnaStructureInfo", ["name", "seq",
-                                  "real_structure", "mfe"])
+RnaStructureInfo = namedtuple("RnaStructureInfo", ["seq", "structure",
+                                                   "length", "mfe"])
 
-FoldResult = namedtuple("FoldResult", ["is_optimal", "sequence", "structure",
-                        "mfe", "distance"])
+FoldResult = namedtuple("FoldResult", ["is_optimal", "seq", "structure", "mfe",
+                                       "tree_dist", "n_tree_dist", "bp_dist",
+                                       "n_bp_dist"])

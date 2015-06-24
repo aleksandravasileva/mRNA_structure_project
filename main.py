@@ -37,6 +37,10 @@ def main():
     forna_folder = "{}/forna".format(output_folder)
     os.makedirs(forna_folder, exist_ok=True)
 
+    create_forna_files_for_collection(rna_collection, forna_folder, "Real")
+
+    logger.info('Created files of real structures for forna')
+
     create_forna_files_for_collection(rnafold_collection, forna_folder,
                                       "RNAfold")
 
@@ -125,10 +129,11 @@ def get_structure_from_input(input_lines, number):
         break
 
     mfe = get_mfe(seq, structure)
+    length = len(seq)
 
-    mRNA_tuple = datatypes.RnaStructureInfo(name_of_seq, seq, structure, mfe)
+    mRNA_tuple = datatypes.RnaStructureInfo(seq, structure, length, mfe)
 
-    return mRNA_tuple, number
+    return mRNA_tuple, number, name_of_seq
 
 
 def create_mRNA_structure_collection(input_filename):
@@ -143,11 +148,13 @@ def create_mRNA_structure_collection(input_filename):
     AUGGGCGCGAGAAACUCCGUCUU...
     .....((.(((...)))))((((...
 
-    Creates list, containing named tuples of experimentally proved RNA
-    structures names, their sequences and structures in dot-bracket form.
+    Returns dictionary, containing name of the structure as a key and
+    named tuple of experimentally proved structure in dot-bracket form,
+    its nucleotide sequence, length of this sequence and energy of the
+    structure
     """
 
-    mrna_collection = []
+    mrna_collection = {}
 
     i = 0
 
@@ -162,7 +169,7 @@ def create_mRNA_structure_collection(input_filename):
                 if line[0] == ">":
                     one_struct_info = get_structure_from_input(input_lines[i:],
                                                                i)
-                    mrna_collection.append(one_struct_info[0])
+                    mrna_collection[one_struct_info[2]] = one_struct_info[0]
                     i = one_struct_info[1]
                 i += 1
             except StopIteration:
@@ -171,29 +178,33 @@ def create_mRNA_structure_collection(input_filename):
     return mrna_collection
 
 
-def create_forna_file(output_folder, tool, name, seq, structure):
+def create_forna_file(output_folder, origin, name, seq, structure):
     """Creates file that can be used as an input of RNA structures visualization
     tool - forna (http://nibiru.tbi.univie.ac.at/forna/).
     File contains name of the structure, nucleotide sequence and the structure
     itself in dot-bracket form.
     The name of the used predicting tool should be passed as an argument.
     """
-
-    forna_file = '{}/{}_({}_predicted).txt'.format(output_folder, name, tool)
+    if origin == "Real":
+        forna_file = '{}/{}_(Real).txt'.format(output_folder, name)
+    else:
+        forna_file = '{}/{}_({}_predicted).txt'.format(output_folder, name, origin)
     with open(forna_file, 'w') as output:
-        output.write('>{}_{}_predicted'.format(name, tool))
+        if origin == "Real":
+            output.write('>{}_Real'.format(name))
+        else:
+            output.write('>{}_{}_predicted'.format(name, origin))
         output.write('\n')
         output.write(seq)
         output.write('\n')
         output.write(structure)
 
 
-def create_forna_files_for_collection(input_collection, output_folder, tool):
+def create_forna_files_for_collection(input_collection, output_folder, origin):
     """Creates forna files for the collection of predicted structures.
     """
-
     for key, value in input_collection.items():
-        create_forna_file(output_folder, tool, key, value.sequence,
+        create_forna_file(output_folder, origin, key, value.seq,
                           value.structure)
 
 
